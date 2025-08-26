@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Habit Tracker</title>
+  <meta name="description" content="Simple, offline habit tracker. Add habits, tap days to check off, see monthly totals and streaks.">
+  <style>
+    :root {
+      --bg: #fafafa;
+      --panel: #ffffff;
+      --text: #111111;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --accent: #2563eb;
+      --accent-2: #1d4ed8;
+      --okay: #059669;
+      --okay-2: #047857;
+      --danger: #dc2626;
+      --danger-2: #b91c1c;
+      --chip: #f3f4f6;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b0b0c;
+        --panel: #0f0f10;
+        --text: #f5f5f5;
+        --muted: #9ca3af;
+        --border: #1f2937;
+        --accent: #3b82f6;
+        --accent-2: #2563eb;
+        --okay: #10b981;
+        --okay-2: #059669;
+        --danger: #ef4444;
+        --danger-2: #dc2626;
+        --chip: #111214;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+    }
+    .container { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-weight: 650; font-size: 28px; margin: 0 0 4px; }
+    h2 { font-weight: 650; font-size: 20px; margin: 16px 0 12px; }
+    p.sub { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .btn {
+      appearance: none; border: 1px solid var(--border); background: var(--chip); color: var(--text);
+      padding: 8px 12px; border-radius: 12px; cursor: pointer; font-size: 14px;
+    }
+    .btn:hover { filter: brightness(0.98); }
+    .btn:active { transform: scale(0.98); }
+    .btn-ghost { background: transparent; }
+    .btn-accent { background: var(--accent); color: white; border-color: var(--accent-2); }
+    .btn-ok { background: var(--okay); color: white; border-color: var(--okay-2); }
+    .btn-danger { background: var(--danger); color: white; border-color: var(--danger-2); }
+    .badge {
+      display: inline-block; padding: 6px 10px; border-radius: 12px; border: 1px solid var(--border);
+      background: var(--panel); font-size: 14px;
+    }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+    .input {
+      width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+      padding: 10px 12px; border-radius: 12px; font-size: 16px;
+    }
+    .grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .dow { font-size: 12px; color: var(--muted); text-align: center; padding: 6px 0; }
+    .day {
+      border-radius: 16px; border: 1px solid var(--border); overflow: hidden;
+      background: var(--panel);
+    }
+    .day.dim { opacity: 0.6; }
+    .day-head {
+      display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 12px; color: var(--muted);
+    }
+    .day-head .today { color: var(--accent); font-weight: 600; font-size: 11px; }
+    .day-body { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .habit-chip {
+      width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;
+      background: var(--chip); font-size: 14px; display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer;
+    }
+    .habit-chip.done { background: var(--okay); color: white; border-color: var(--okay-2); }
+    .cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 640px) { .cols { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 960px) { .cols { grid-template-columns: 1fr 1fr 1fr; } }
+    .summary-card { display: flex; flex-direction: column; gap: 10px; }
+    .summary-top { display: flex; align-items: flex-start; justify-content: space-between; }
+    .muted { color: var(--muted); }
+    footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+    .split { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 8px; align-items: center; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="toolbar">
+      <div>
+        <h1>Habit Tracker</h1>
+        <p class="sub">Tap to check off. Everything saves on your device.</p>
+      </div>
+      <div class="row">
+        <button class="btn" id="prevBtn" aria-label="Previous month">◀</button>
+        <div class="badge" id="monthLabel">Month YYYY</div>
+        <button class="btn" id="nextBtn" aria-label="Next month">▶</button>
+        <button class="btn btn-accent" id="todayBtn">Today</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom: 10px;">
+      <button class="btn btn-ok" id="markAllBtn">Mark all for today</button>
+      <button class="btn" id="clearTodayBtn">Clear today</button>
+    </div>
+
+    <div class="panel" style="margin-bottom: 16px;">
+      <div class="split">
+        <input class="input" id="newHabitInput" placeholder="Add a habit (e.g., Read 20 min)" />
+        <button class="btn btn-accent" id="addHabitBtn">Add</button>
+      </div>
+    </div>
+
+    <div class="grid-7" id="dowRow" aria-hidden="true"></div>
+    <div class="grid-7" id="calendarGrid"></div>
+
+    <section style="margin-top: 20px;">
+      <h2>This Month</h2>
+      <div class="cols" id="summaryGrid"></div>
+    </section>
+
+    <footer>
+      Tip: On iPad, you can host this file and use <b>Share → Add to Home Screen</b> for an app icon.
+    </footer>
+  </div>
+
+  <script>
+    // ---------- Utilities ----------
+    const fmtYMD = (d) => d.toISOString().slice(0, 10);
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+    const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+    const endOfMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const weekday = (d) => d.getDay(); // 0 Sun .. 6 Sat
+    const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+    // ---------- Storage ----------
+    const STORAGE_KEY = "habit-tracker-v1";
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) { return null; }
+    }
+    function saveState(state) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    // Default state
+    const DEFAULT = {
+      habits: [
+        { id: "water", name: "Drink water" },
+        { id: "study", name: "Study" },
+        { id: "move", name: "Workout / Move" },
+      ],
+      records: {}
+    };
+
+    let state = loadState() || DEFAULT;
+
+    // ---------- Month grid ----------
+    function monthGrid(date) {
+      const start = startOfMonth(date);
+      const end = endOfMonth(date);
+      const first = addDays(start, -weekday(start));
+      const last = addDays(end, 6 - weekday(end));
+      const days = [];
+      for (let d = new Date(first); d <= last; d = addDays(d, 1)) days.push(new Date(d));
+      return days;
+    }
+
+    function calcTotals(records, habits, monthDates) {
+      const totals = Object.fromEntries(habits.map(h => [h.id, 0]));
+      for (const d of monthDates) {
+        const key = fmtYMD(d);
+        const day = records[key] || {};
+        for (const h of habits) if (day[h.id]) totals[h.id]++;
+      }
+      return totals;
+    }
+
+    function calcCurrentStreak(records, habitId) {
+      const today = startOfDay(new Date());
+      let streak = 0;
+      for (let d = new Date(today); ; d = addDays(d, -1)) {
+        const key = fmtYMD(d);
+        const done = !!(records[key] && records[key][habitId]);
+        if (done) streak++;
+        else break;
+      }
+      return streak;
+    }
+
+    // ---------- DOM refs ----------
+    const monthLabel = document.getElementById("monthLabel");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const todayBtn = document.getElementById("todayBtn");
+    const dowRow = document.getElementById("dowRow");
+    const grid = document.getElementById("calendarGrid");
+    const summaryGrid = document.getElementById("summaryGrid");
+    const addHabitBtn = document.getElementById("addHabitBtn");
+    const newHabitInput = document.getElementById("newHabitInput");
+    const markAllBtn = document.getElementById("markAllBtn");
+    const clearTodayBtn = document.getElementById("clearTodayBtn");
+
+    // Weekday header
+    const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    function renderDOW() {
+      dowRow.innerHTML = DOW.map(w => `<div class="dow">${w}</div>`).join("");
+    }
+    renderDOW();
+
+    // ---------- UI state ----------
+    let uiMonthOffset = 0;
+
+    function setUiMonthOffset(n) {
+      uiMonthOffset = n;
+      render();
+    }
+
+    // ---------- Actions ----------
+    function addHabit() {
+      const name = (newHabitInput.value || "").trim();
+      if (!name) return;
+      const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      if (state.habits.some(h => h.id === id)) {
+        alert("That habit already exists.");
+        return;
+      }
+      state = { ...state, habits: [...state.habits, { id, name }] };
+      saveState(state);
+      newHabitInput.value = "";
+      render();
+    }
+
+    function removeHabit(id) {
+      if (!confirm("Remove this habit? Your past check-ins will remain.")) return;
+      state = { ...state, habits: state.habits.filter(h => h.id !== id) };
+      saveState(state);
+      render();
+    }
+
+    function renameHabit(id) {
+      const current = state.habits.find(h => h.id === id);
+      const name = prompt("Rename habit", current ? current.name : "");
+      if (!name) return;
+      state = {
+        ...state,
+        habits: state.habits.map(h => (h.id === id ? { ...h, name } : h))
+      };
+      saveState(state);
+      render();
+    }
+
+    function toggle(habitId, date) {
+      const key = fmtYMD(date);
+      const day = { ...(state.records[key] || {}) };
+      day[habitId] = !day[habitId];
+      state = { ...state, records: { ...state.records, [key]: day } };
+      saveState(state);
+      renderSummary(); // partial update
+    }
+
+    function clearDay(date) {
+      const key = fmtYMD(date);
+      const next = { ...state.records };
+      delete next[key];
+      state = { ...state, records: next };
+      saveState(state);
+      render();
+    }
+
+    function markAllToday() {
+      const today = startOfDay(new Date());
+      const key = fmtYMD(today);
+      const dayAllTrue = Object.fromEntries(state.habits.map(h => [h.id, true]));
+      state = { ...state, records: { ...state.records, [key]: dayAllTrue } };
+      saveState(state);
+      render();
+    }
+
+    // ---------- Render ----------
+    function render() {
+      const base = new Date();
+      const viewingDate = new Date(base.getFullYear(), base.getMonth() + uiMonthOffset, 1);
+      const days = monthGrid(viewingDate);
+      monthLabel.textContent = viewingDate.toLocaleString(undefined, { month: "long", year: "numeric" });
+
+      const todayKey = fmtYMD(new Date());
+      grid.innerHTML = "";
+      for (const d of days) {
+        const inMonth = d.getMonth() === viewingDate.getMonth();
+        const isToday = fmtYMD(d) === todayKey;
+        const key = fmtYMD(d);
+        const dayRecs = state.records[key] || {};
+
+        const dayDiv = document.createElement("div");
+        dayDiv.className = "day" + (inMonth ? "" : " dim");
+
+        const head = document.createElement("div");
+        head.className = "day-head";
+        head.innerHTML = `<span>${d.getDate()}</span>${isToday ? '<span class="today">today</span>' : "<span></span>"}`;
+        dayDiv.appendChild(head);
+
+        const body = document.createElement("div");
+        body.className = "day-body";
+
+        if (state.habits.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "muted";
+          empty.style.fontSize = "12px";
+          empty.textContent = "Add a habit above";
+          body.appendChild(empty);
+        } else {
+          for (const h of state.habits) {
+            const checked = !!dayRecs[h.id];
+            const btn = document.createElement("button");
+            btn.className = "habit-chip" + (checked ? " done" : "");
+            btn.setAttribute("aria-pressed", checked ? "true" : "false");
+            btn.addEventListener("click", () => toggle(h.id, d));
+            btn.innerHTML = `<span class="truncate">${escapeHtml(h.name)}</span><span style="font-size:12px;opacity:.9;">${checked ? "✓" : "Tap"}</span>`;
+            body.appendChild(btn);
+          }
+        }
+
+        dayDiv.appendChild(body);
+        grid.appendChild(dayDiv);
+      }
+
+      renderSummary(viewingDate, days);
+    }
+
+    function renderSummary(viewingDate, daysForMonth) {
+      const base = new Date();
+      const vDate = viewingDate || new Date(base.getFullYear(), base.getMonth() + uiMonthOffset, 1);
+      const days = daysForMonth || monthGrid(vDate);
+      const totals = calcTotals(state.records, state.habits, days);
+      summaryGrid.innerHTML = "";
+      for (const h of state.habits) {
+        const card = document.createElement("div");
+        card.className = "panel summary-card";
+        const streak = calcCurrentStreak(state.records, h.id);
+        card.innerHTML = `
+          <div class="summary-top">
+            <div>
+              <div style="font-weight:600;">${escapeHtml(h.name)}</div>
+              <div class="muted" style="font-size:14px;">${(totals[h.id] || 0)}× this month</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="muted" style="font-size:13px;">Streak</div>
+              <div style="font-weight:650; font-size:22px;">${streak}</div>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn" data-action="rename">Rename</button>
+            <button class="btn btn-danger" data-action="remove">Remove</button>
+          </div>
+        `;
+        card.querySelector('[data-action="rename"]').addEventListener("click", () => renameHabit(h.id));
+        card.querySelector('[data-action="remove"]').addEventListener("click", () => removeHabit(h.id));
+        summaryGrid.appendChild(card);
+      }
+    }
+
+    // ---------- Helpers ----------
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, s => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[s]));
+    }
+
+    // ---------- Events ----------
+    prevBtn.addEventListener("click", () => setUiMonthOffset(uiMonthOffset - 1));
+    nextBtn.addEventListener("click", () => setUiMonthOffset(uiMonthOffset + 1));
+    todayBtn.addEventListener("click", () => setUiMonthOffset(0));
+    addHabitBtn.addEventListener("click", addHabit);
+    newHabitInput.addEventListener("keydown", (e) => { if (e.key === "Enter") addHabit(); });
+    markAllBtn.addEventListener("click", markAllToday);
+    clearTodayBtn.addEventListener("click", () => clearDay(new Date()));
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
