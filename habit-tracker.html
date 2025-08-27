@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Habit Tracker — Auto Sync</title>
+  <meta name="description" content="Habit tracker with daily goals: tap to add reps, bar fills toward goal. Long-press to add/subtract custom reps. Sync-capable.">
+  <style>
+    :root{--bg:#0b0b0c;--panel:#0f0f10;--text:#f6f7fb;--muted:#9aa3b2;--border:#1f2937;--accent:#3b82f6;--accent-2:#2563eb;--okay:#10b981;--okay-2:#059669;--danger:#ef4444;--danger-2:#dc2626;--chip:#15161a;--chip-2:#1b1c20}
+    @media (prefers-color-scheme: light){:root{--bg:#fafafa;--panel:#ffffff;--text:#111111;--muted:#6b7280;--border:#e5e7eb;--accent:#2563eb;--accent-2:#1d4ed8;--okay:#059669;--okay-2:#047857;--danger:#dc2626;--danger-2:#b91c1c;--chip:#f3f4f6;--chip-2:#eef0f3}}
+    *{box-sizing:border-box}body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";background:var(--bg);color:var(--text)}
+    .container{max-width:1120px;margin:0 auto;padding:22px 16px 48px}
+    h1{font-weight:650;font-size:28px;margin:0 0 4px}
+    h2{font-weight:650;font-size:20px;margin:16px 0 12px}
+    .sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+    .btn{appearance:none;border:1px solid var(--border);background:var(--chip);color:var(--text);padding:8px 12px;border-radius:12px;cursor:pointer;font-size:14px}
+    .btn:hover{filter:brightness(.98)}.btn:active{transform:scale(.98)}
+    .btn-accent{background:var(--accent);color:#fff;border-color:var(--accent-2)}
+    .btn-ok{background:var(--okay);color:#fff;border-color:var(--okay-2)}.btn-danger{background:var(--danger);color:#fff;border-color:var(--danger-2)}
+
+    .badge{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:12px;border:1px solid var(--border);background:var(--panel);font-size:14px}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px}
+    .input{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);padding:10px 12px;border-radius:12px;font-size:16px}
+
+    .grid-7{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .dow{font-size:12px;color:var(--muted);text-align:center;padding:6px 0}
+    .day{border-radius:16px;border:1px solid var(--border);overflow:hidden;background:var(--panel)}
+    .day.dim{opacity:.6}
+    .day-head{display:flex;align-items:baseline;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--muted)}
+    .day-head .today{color:var(--accent);font-weight:600;font-size:11px}
+    .day-body{padding:8px;display:flex;flex-direction:column;gap:6px}
+
+    /* Single-tap chip with progress fill */
+    .Habit-chip{
+      position:relative; overflow:hidden;
+      width:100%; text-align:left; padding:10px 12px;
+      border:1px solid var(--border); border-radius:12px;
+      background:var(--chip); font-size:14px; display:flex; align-items:center; justify-content:space-between;
+      cursor:pointer;
+    }
+    .Habit-chip .fill{position:absolute; left:0; top:0; bottom:0; width:0%; background:var(--accent); opacity:.35; pointer-events:none}
+    .Habit-chip .label{position:relative; z-index:1}
+    .Habit-chip .hint{position:relative; z-index:1; font-size:12px; opacity:.9}
+    .Habit-chip.done{background:var(--okay); color:#fff; border-color:var(--okay-2)}
+    .Habit-chip.extra::after{
+      content:"+"; position:absolute; right:10px; top:8px; font-weight:700; opacity:.7;
+    }
+
+    .cols{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:640px){.cols{grid-template-columns:1fr 1fr}}
+    @media(min-width:960px){.cols{grid-template-columns:1fr 1fr 1fr}}
+    .summary-card{display:flex;flex-direction:column;gap:10px}
+    .summary-top{display:flex;align-items:flex-start;justify-content:space-between}
+    footer{text-align:center;color:var(--muted);font-size:12px;margin-top:28px}
+    .split{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center}
+    .small{font-size:12px;color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--panel);font-size:12px}
+    .dot{width:8px;height:8px;border-radius:999px;background:#94a3b8}.dot.ok{background:#10b981}.dot.warn{background:#f59e0b}.dot.err{background:#ef4444}
+    .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--chip-2);border:1px solid var(--border);border-radius:8px;padding:2px 6px}
+    .input-inline{width:220px}
+    .goal{display:inline-flex;gap:6px;align-items:center}
+    .goal .n{min-width:2ch;text-align:center;font-weight:650}
+  </style>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="toolbar">
+      <div>
+        <h1>Habit Tracker — Auto Sync</h1>
+        <p class="sub">Tap to add reps; the bar fills toward your daily goal. Long-press to add/subtract a custom number.</p>
+        <p class="small" id="configHint" style="display:none;">⚠ Paste your Firebase config (look for <span class="kbd">firebaseConfig</span>), including <span class="kbd">databaseURL</span>, then reload.</p>
+      </div>
+      <div class="row">
+        <button class="btn" id="prevBtn" aria-label="Previous month">◀</button>
+        <div class="badge" id="monthLabel">Month YYYY</div>
+        <button class="btn" id="nextBtn" aria-label="Next month">▶</button>
+        <button class="btn btn-accent" id="todayBtn">Today</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:10px;justify-content:space-between;">
+	<select class="input input-inline" id="groupFilter" title="Filter by group">
+	  <option value="all">All groups</option>
+	</select>
+      <div class="row">
+        <button class="btn btn-ok" id="markAllBtn">+1 all for today</button>
+        <button class="btn" id="clearTodayBtn">Clear today</button>
+        <button class="btn" id="exportBtn" title="Export all records to CSV">Export CSV</button>
+      </div>
+      <div class="row">
+        <div class="pill"><span class="dot" id="syncDot"></span><span id="syncText">Offline</span></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="split">
+        <input class="input" id="newHabitInput" placeholder="Add a Habit (e.g., Practice guitar 20m)" />
+        <button class="btn btn-accent" id="addHabitBtn">Add</button>
+        <div class="row">
+          <input class="input input-inline" id="syncKeyInput" placeholder="Sync Key (share across devices)" />
+          <button class="btn" id="setKeyBtn">Link Devices</button>
+        </div>
+      </div>
+      <p class="small" style="margin-top:8px;">Tip: Use the same <strong>Sync Key</strong> on your iPad and Mac to share data.</p>
+    </div>
+
+    <div class="grid-7" id="dowRow" aria-hidden="true"></div>
+    <div class="grid-7" id="calendarGrid"></div>
+
+    <section style="margin-top:20px;">
+      <h2>This Month</h2>
+      <div class="cols" id="summaryGrid"></div>
+    </section>
+
+    <footer>Long-press a chip to choose reps to add/subtract. Set daily goals in the summary cards.</footer>
+  </div>
+
+  <script>
+    // ========= FILL WITH YOUR FIREBASE CONFIG (must include databaseURL) =========
+    const firebaseConfig = {
+  apiKey: "AIzaSyCS8vzd1W3f1znbQSm57NZzi4TI59B5HK8",
+  authDomain: "hobby-tracker-929a7.firebaseapp.com",
+  databaseURL: "https://hobby-tracker-929a7-default-rtdb.firebaseio.com",
+  projectId: "hobby-tracker-929a7",
+  storageBucket: "hobby-tracker-929a7.appspot.com",
+  messagingSenderId: "801249891138",
+  appId: "1:801249891138:web:d67e90fe767afcd3ba6edb",
+  measurementId: "G-ZSRJ1BXL2E"
+};
+    // ============================================================================
+
+    // Utilities
+    const fmtYMD=(d)=>d.toISOString().slice(0,10);
+    const startOfDay=(d)=>new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    const addDays=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+    const startOfMonth=(d)=>new Date(d.getFullYear(),d.getMonth(),1);
+    const endOfMonth=(d)=>new Date(d.getFullYear(),d.getMonth()+1,0);
+    const weekday=(d)=>d.getDay();
+
+    // Local storage
+    const STORAGE_KEY="Habit-tracker-v1";
+    const loadState=()=>{try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch{return null}};
+    const saveState=(s)=>localStorage.setItem(STORAGE_KEY,JSON.stringify(s));
+    const getOrMake=(k,make)=>{const v=localStorage.getItem(k); if(v) return v; const n=make(); localStorage.setItem(k,n); return n;}
+    const CLIENT_ID=getOrMake("Habit_CLIENT_ID",()=>Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2));
+    let state=loadState()||{Habits:[{id:"guitar",name:"Practice guitar",target:1},{id:"read",name:"Read",target:1},{id:"run",name:"Run / Move",target:1}],records:{}};
+    let syncKey = localStorage.getItem("Habit_SYNC_KEY") || "";
+
+    // Migration: booleans -> counts; add default target
+    (function migrate(){
+      let changed=false;
+      for(const date in state.records){
+        const day=state.records[date];
+        for(const id in day){
+          if(typeof day[id]==="boolean"){ day[id]=day[id]?1:0; changed=true; }
+          else if(typeof day[id]!=="number"){ day[id]=Number(day[id])||0; changed=true; }
+        }
+      }
+      for(const h of state.Habits){ if(typeof h.target!=="number" || h.target<1){ h.target=1; changed=true; } }
+      if(changed) saveState(state);
+    })();
+
+    // Firebase
+    let app, db, auth;
+    function setSyncStatus(kind,text){
+      const syncDot=document.getElementById("syncDot");
+      const syncText=document.getElementById("syncText");
+      syncDot.className="dot"+(kind==="ok"?" ok":kind==="warn"?" warn":kind==="err"?" err":"");
+      syncText.textContent=text;
+    }
+    async function initFirebase(){
+      try{
+        if(!firebaseConfig.databaseURL || firebaseConfig.apiKey.includes("YOUR_")){
+          document.getElementById("configHint").style.display="block";
+          setSyncStatus("warn","Config needed"); return;
+        }
+        app=firebase.initializeApp(firebaseConfig);
+        auth=firebase.auth();
+        db=firebase.database();
+        setSyncStatus("warn","Signing in…");
+        await auth.signInAnonymously();
+        setSyncStatus("ok","Signed in");
+        if(syncKey) attachSync(syncKey);
+      }catch(e){ console.error(e); setSyncStatus("err","Firebase error"); }
+    }
+    function dbRefFor(key){ return db.ref(`HabitTracker/v1/${encodeURIComponent(key)}`); }
+    let saveTimer=null;
+    function schedulePush(ref){ if(saveTimer) clearTimeout(saveTimer); saveTimer=setTimeout(()=>pushRemote(ref),300); }
+    function applyRemote(remote){
+      const {Habits,records}=remote||{};
+      if(Array.isArray(Habits)) state.Habits=Habits.map(h=>({...h,target:Math.max(1,Number(h.target||1)), group: typeof h.group === "string" ? h.group : ""}));
+      if(records && typeof records==="object") state.records=records;
+      saveState(state); render(); setSyncStatus("ok","Synced");
+    }
+    async function pushRemote(ref){
+      if(!ref){ if(!syncKey || !db) return; ref=dbRefFor(syncKey); }
+      try{ setSyncStatus("warn","Saving…"); await ref.set({Habits:state.Habits,records:state.records,meta:{updatedAt:Date.now(),clientId:CLIENT_ID}}); setSyncStatus("ok","Synced"); }
+      catch(e){ console.error(e); setSyncStatus("err","Save failed"); }
+    }
+    function attachSync(key){
+      if(!db) return;
+      const ref=dbRefFor(key);
+      ref.once("value").then(s=>{ const r=s.val(); if(!r){ pushRemote(ref); } else { applyRemote(r); } });
+      ref.on("value",s=>{ const r=s.val(); if(r) applyRemote(r); });
+    }
+
+    // Helpers
+    function monthGrid(date){
+      const start=startOfMonth(date),end=endOfMonth(date);
+      const first=addDays(start,-weekday(start));
+      const last=addDays(end,6-weekday(end));
+      const days=[]; for(let d=new Date(first); d<=last; d=addDays(d,1)) days.push(new Date(d));
+      return days;
+    }
+    function calcTotals(records,Habits,monthDates){
+      const totals=Object.fromEntries(Habits.map(h=>[h.id,0]));
+      for(const d of monthDates){
+        const key=fmtYMD(d), day=records[key]||{};
+        for(const h of Habits) totals[h.id]+=Number(day[h.id]||0);
+      }
+      return totals;
+    }
+    function calcCurrentStreak(records,HabitId){
+      const today=startOfDay(new Date()); let streak=0;
+      for(let d=new Date(today);;d=addDays(d,-1)){
+        const key=fmtYMD(d), count=Number((records[key]||{})[HabitId]||0);
+        const target=(state.Habits.find(h=>h.id===HabitId)?.target)||1;
+        if(count>=target) streak++; else break;
+      }
+      return streak;
+    }
+    function getCount(day,id){ const v=day[id]; return typeof v==="number"?v:(v?1:0); }
+    function addReps(date,id,delta){
+      const key=fmtYMD(date); const day={...(state.records[key]||{})};
+      day[id]=Math.max(0, getCount(day,id)+delta);
+      state={...state,records:{...state.records,[key]:day}};
+      saveState(state); render(); if(syncKey && typeof db!=="undefined") schedulePush();
+    }
+    function setReps(date,id,val){
+      const key=fmtYMD(date); const day={...(state.records[key]||{})};
+      day[id]=Math.max(0, Math.floor(Number(val)||0));
+      state={...state,records:{...state.records,[key]:day}};
+      saveState(state); render(); if(syncKey && typeof db!=="undefined") schedulePush();
+    }
+    function setTarget(id,newTarget){
+      newTarget=Math.max(1,Math.floor(Number(newTarget)||1));
+      state={...state,Habits:state.Habits.map(h=>h.id===id?{...h,target:newTarget}:h)};
+      saveState(state); render(); if(syncKey && typeof db!=="undefined") schedulePush();
+    }
+
+    // CSV export (counts)
+    function csvEscape(v){return '"' + String(v).replace(/"/g,'""') + '"'}
+    function exportCSV(){
+      const headers=["Date",...state.Habits.map(h=>h.name)];
+      const rows=[headers];
+      const dates=Object.keys(state.records).sort();
+      for(const date of dates){
+        const day=state.records[date]||{};
+        rows.push([date, ...state.Habits.map(h=>Number(day[h.id]||0))]);
+      }
+      const csv=rows.map(r=>r.map(csvEscape).join(",")).join("\r\n");
+      const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const now=new Date(); const y=now.getFullYear(), m=String(now.getMonth()+1).padStart(2,"0"), d=String(now.getDate()).padStart(2,"0");
+      const a=document.createElement("a"); a.href=url; a.download=`Habit-tracker-${y}${m}${d}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    // DOM
+    const monthLabel=document.getElementById("monthLabel");
+    const prevBtn=document.getElementById("prevBtn");
+    const nextBtn=document.getElementById("nextBtn");
+    const todayBtn=document.getElementById("todayBtn");
+    const dowRow=document.getElementById("dowRow");
+    const grid=document.getElementById("calendarGrid");
+    const summaryGrid=document.getElementById("summaryGrid");
+    const addHabitBtn=document.getElementById("addHabitBtn");
+    const newHabitInput=document.getElementById("newHabitInput");
+    const markAllBtn=document.getElementById("markAllBtn");
+    const clearTodayBtn=document.getElementById("clearTodayBtn");
+    const exportBtn=document.getElementById("exportBtn");
+    const setKeyBtn=document.getElementById("setKeyBtn");
+    const syncKeyInput=document.getElementById("syncKeyInput"); syncKeyInput.value=syncKey;
+// --- Groups: selected filter + helpers ---
+let selectedGroup = localStorage.getItem("Habit_SELECTED_GROUP") || "all";
+const groupFilter = document.getElementById("groupFilter");
+
+// ensure every habit has a 'group' string (safe to run multiple times)
+for (const h of state.Habits) { if (typeof h.group !== "string") h.group = ""; }
+saveState(state);
+
+function uniqueGroups(){
+  const s = new Set();
+  for (const h of state.Habits) {
+    const g = (h.group || "").trim();
+    if (g) s.add(g);
+  }
+  return Array.from(s).sort((a,b)=>a.localeCompare(b));
+}
+
+function renderGroupFilter(){
+  if (!groupFilter) return;
+  const groups = uniqueGroups();
+  groupFilter.innerHTML = ""; // rebuild options
+  const optAll = document.createElement("option");
+  optAll.value = "all"; optAll.textContent = "All groups";
+  groupFilter.appendChild(optAll);
+  for (const g of groups) {
+    const opt = document.createElement("option");
+    opt.value = g; opt.textContent = g;
+    groupFilter.appendChild(opt);
+  }
+  groupFilter.value = (groups.includes(selectedGroup) || selectedGroup === "all") ? selectedGroup : "all";
+}
+
+if (groupFilter) {
+  renderGroupFilter();
+  groupFilter.addEventListener("change", () => {
+    selectedGroup = groupFilter.value || "all";
+    localStorage.setItem("Habit_SELECTED_GROUP", selectedGroup);
+    render();
+  });
+}
+
+// set a habit's group
+function setGroup(id, groupName){
+  groupName = (groupName || "").trim();
+  state = {
+    ...state,
+    Habits: state.Habits.map(h => h.id === id ? { ...h, group: groupName } : h)
+  };
+  saveState(state);
+  renderGroupFilter();
+  render();
+  if (syncKey && typeof db !== "undefined") schedulePush();
+}
+    const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    function renderDOW(){ dowRow.innerHTML=DOW.map(w=>`<div class="dow">${w}</div>`).join(""); }
+    renderDOW();
+
+    // UI state
+    let uiMonthOffset=0;
+    function setUiMonthOffset(n){ uiMonthOffset=n; render(); }
+
+    // Actions
+    function addHabit(){
+      const name=(newHabitInput.value||"").trim(); if(!name) return;
+      const id=name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+      if(state.Habits.some(h=>h.id===id)){ alert("That Habit already exists."); return; }
+      state={...state,Habits:[...state.Habits,{id,name,target:1, group: (selectedGroup!=="all"?selectedGroup:"")}]}; saveState(state); newHabitInput.value=""; renderGroupFilter(); render();
+      if(syncKey && typeof db!=="undefined") schedulePush();
+    }
+    function removeHabit(id){
+      if(!confirm("Remove this Habit? Your past check-ins remain.")) return;
+      state={...state,Habits:state.Habits.filter(h=>h.id!==id)}; saveState(state); renderGroupFilter(); render();
+      if(syncKey && typeof db!=="undefined") schedulePush();
+    }
+    function renameHabit(id){
+      const current=state.Habits.find(h=>h.id===id);
+      const name=prompt("Rename Habit", current?current.name:""); if(!name) return;
+      state={...state,Habits:state.Habits.map(h=>h.id===id?{...h,name}:h)}; saveState(state); renderGroupFilter(); render();
+      if(syncKey && typeof db!=="undefined") schedulePush();
+    }
+    function clearDay(date){
+      const key=fmtYMD(date); const next={...state.records}; delete next[key];
+      state={...state,records:next}; saveState(state); render();
+      if(syncKey && typeof db!=="undefined") schedulePush();
+    }
+function markAllToday(){
+  const today = startOfDay(new Date());
+  const key   = fmtYMD(today);
+  const day   = { ...(state.records[key] || {}) };
+
+  // Only +1 the habits that match the current group filter
+  const habitsToShow = state.Habits.filter(
+    h => selectedGroup === "all" || (h.group || "") === selectedGroup
+  );
+
+  for (const h of habitsToShow) {
+    day[h.id] = (Number(day[h.id] || 0)) + 1;
+  }
+
+  state = { ...state, records: { ...state.records, [key]: day } };
+  saveState(state);
+  render();
+  if (syncKey && typeof db !== "undefined") schedulePush();
+}
+    // Long-press helper
+    function withLongPress(el, onShort, onLong){
+      let t=null, didLong=false;
+      const start=(e)=>{ didLong=false; t=setTimeout(()=>{didLong=true; onLong(e);}, 500); };
+      const clear=()=>{ if(t){clearTimeout(t); t=null;} };
+      el.addEventListener("mousedown", start);
+      el.addEventListener("touchstart", start, {passive:true});
+      ["mouseup","mouseleave","touchend","touchcancel"].forEach(ev=>el.addEventListener(ev, clear));
+      el.addEventListener("click",(e)=>{ if(didLong) return; onShort(e); });
+    }
+
+function render(){
+  const base = new Date();
+  const viewingDate = new Date(base.getFullYear(), base.getMonth()+uiMonthOffset, 1);
+  const days = monthGrid(viewingDate);
+
+  const habitsToShow = state.Habits.filter(
+    h => selectedGroup === "all" || (h.group || "") === selectedGroup
+  );
+
+  monthLabel.textContent = viewingDate.toLocaleString(undefined, { month:"long", year:"numeric" });
+
+  const todayKey = fmtYMD(new Date());
+  grid.innerHTML = "";
+
+  for (const d of days){
+    const inMonth = d.getMonth() === viewingDate.getMonth();
+    const isToday = fmtYMD(d) === todayKey;
+    const key = fmtYMD(d);
+    const dayRecs = state.records[key] || {};
+
+    const dayDiv = document.createElement("div");
+    dayDiv.className = "day" + (inMonth ? "" : " dim");
+
+    const head = document.createElement("div");
+    head.className = "day-head";
+    head.innerHTML = `<span>${d.getDate()}</span>${isToday?'<span class="today">today</span>':"<span></span>"}`;
+    dayDiv.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "day-body";
+
+    if (habitsToShow.length === 0){
+      const empty = document.createElement("div");
+      empty.style.color = "var(--muted)";
+      empty.style.fontSize = "12px";
+      empty.textContent = (selectedGroup === "all" ? "Add a Habit above" : "No habits in this group");
+      body.appendChild(empty);
+    } else {
+      for (const h of habitsToShow){
+        const count  = Number((dayRecs[h.id] ?? 0)) || 0;
+        const target = Math.max(1, Number(h.target || 1));
+        const pct    = Math.max(0, Math.min(100, Math.round((count/target)*100)));
+
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "Habit-chip" + (count>=target ? " done" : "") + (count>target ? " extra" : "");
+        chip.setAttribute("aria-pressed", count>=target ? "true" : "false");
+
+        const fill  = document.createElement("div"); fill.className = "fill";  fill.style.width = pct + "%";
+        const label = document.createElement("span"); label.className = "label"; label.textContent = h.name;
+const hint = document.createElement("span");
+hint.className = "hint";
+hint.textContent = ((count >= target) || isUndoMode(d, h.id)) ? "Undo" : "Tap";
+        chip.appendChild(fill); chip.appendChild(label); chip.appendChild(hint);
+
+        // Short tap = +1; Double-click/Shift/etc = -1; Long-press = prompt ±N
+withLongPress(
+  chip,
+  () => {
+    const curKey = fmtYMD(d);
+    const curDay = state.records[curKey] || {};
+    const cur = Number(curDay[h.id] || 0);
+    const tgt = Math.max(1, Number(h.target || 1));
+
+    if (isUndoMode(d, h.id)) {
+      // Keep undoing until 0, then exit undo mode
+      if (cur > 0) {
+        addReps(d, h.id, -1);
+        if (cur - 1 <= 0) setUndoMode(d, h.id, false);
+      } else {
+        setUndoMode(d, h.id, false);
+        addReps(d, h.id, +1); // optional: if already 0, start adding again
+      }
+      return;
+    }
+
+    // Not in undo mode yet:
+    if (cur >= tgt) {
+      // Enter undo mode and start subtracting
+      setUndoMode(d, h.id, true);
+      addReps(d, h.id, -1);
+    } else {
+      // Below goal: add toward the goal
+      addReps(d, h.id, +1);
+    }
+  },
+  () => {
+    const input = prompt(
+      `Add/subtract reps for "${h.name}" on ${key}\nExamples: +1, -1, +3`,
+      "+1"
+    );
+    const delta = Number(input);
+    if (Number.isFinite(delta) && delta !== 0) addReps(d, h.id, delta);
+  }
+);
+
+
+        // Right-click: set exact total
+        chip.addEventListener("contextmenu", (e)=>{
+          e.preventDefault();
+          const val = Number(prompt(`Set total reps for "${h.name}" on ${key}`, String(count)));
+          if (Number.isFinite(val)) setReps(d, h.id, val);
+        });
+
+        body.appendChild(chip);
+      }
+    }
+
+    dayDiv.appendChild(body);
+    grid.appendChild(dayDiv);
+  }
+
+  // ---- Summary cards (ONLY once; nothing after this loop) ----
+  const totals = calcTotals(state.records, habitsToShow, days);
+  summaryGrid.innerHTML = "";
+
+  for (const h of habitsToShow){
+    const card = document.createElement("div");
+    card.className = "panel summary-card";
+    const streak = calcCurrentStreak(state.records, h.id);
+
+    card.innerHTML = `
+      <div class="summary-top">
+        <div>
+          <div style="font-weight:600;">${escapeHtml(h.name)}</div>
+          <div style="color:var(--muted);font-size:14px;">${totals[h.id]} total reps this month</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="color:var(--muted);font-size:13px;">Streak (days goal met)</div>
+          <div style="font-weight:650;font-size:22px;">${streak}</div>
+        </div>
+      </div>
+      <div class="row" style="justify-content:space-between;">
+        <div class="goal">
+          <span class="small">Goal/day:</span>
+          <button class="btn" data-action="goal-dec">–</button>
+          <span class="n">${h.target}</span>
+          <button class="btn" data-action="goal-inc">+</button>
+        </div>
+        <div class="row">
+          <button class="btn" data-action="rename">Rename</button>
+          <button class="btn btn-danger" data-action="remove">Remove</button>
+        </div>
+      </div>`;
+
+    card.querySelector('[data-action="goal-dec"]').addEventListener("click", () =>
+      setTarget(h.id, (h.target || 1) - 1)
+    );
+    card.querySelector('[data-action="goal-inc"]').addEventListener("click", () =>
+      setTarget(h.id, (h.target || 1) + 1)
+    );
+    card.querySelector('[data-action="rename"]').addEventListener("click", () =>
+      renameHabit(h.id)
+    );
+    card.querySelector('[data-action="remove"]').addEventListener("click", () =>
+      removeHabit(h.id)
+    );
+
+    // Optional: group editor UI
+    const groupRow = document.createElement("div");
+    groupRow.className = "row";
+    const groupInput = document.createElement("input");
+    groupInput.className = "input input-inline";
+    groupInput.placeholder = "Group (e.g., Morning routine)";
+    groupInput.value = h.group || "";
+    const saveGroupBtn = document.createElement("button");
+    saveGroupBtn.className = "btn";
+    saveGroupBtn.textContent = "Save group";
+    saveGroupBtn.addEventListener("click", () => setGroup(h.id, groupInput.value));
+    groupRow.appendChild(groupInput);
+    groupRow.appendChild(saveGroupBtn);
+    card.appendChild(groupRow);
+
+    summaryGrid.appendChild(card);
+  }
+}
+
+    function escapeHtml(str){
+      return String(str).replace(/[&<>\"]/g, s => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[s]));
+    }
+
+// --- Undo mode state (per day + habit) ---
+const uiUndoMode = {}; // { [YYYY-MM-DD]: { [habitId]: true } }
+
+function isUndoMode(date, id){
+  const k = fmtYMD(date);
+  return !!(uiUndoMode[k] && uiUndoMode[k][id]);
+}
+function setUndoMode(date, id, on){
+  const k = fmtYMD(date);
+  if (on) {
+    if (!uiUndoMode[k]) uiUndoMode[k] = {};
+    uiUndoMode[k][id] = true;
+  } else {
+    if (uiUndoMode[k]) {
+      delete uiUndoMode[k][id];
+      if (Object.keys(uiUndoMode[k]).length === 0) delete uiUndoMode[k];
+    }
+  }
+}
+
+    // Wire up
+    document.getElementById("prevBtn").addEventListener("click",()=>setUiMonthOffset(uiMonthOffset-1));
+    document.getElementById("nextBtn").addEventListener("click",()=>setUiMonthOffset(uiMonthOffset+1));
+    document.getElementById("todayBtn").addEventListener("click",()=>setUiMonthOffset(0));
+    addHabitBtn.addEventListener("click",addHabit);
+    newHabitInput.addEventListener("keydown",(e)=>{ if(e.key==="Enter") addHabit(); });
+    markAllBtn.addEventListener("click",markAllToday);
+    clearTodayBtn.addEventListener("click",()=>clearDay(new Date()));
+    exportBtn.addEventListener("click",exportCSV);
+    setKeyBtn.addEventListener("click",()=>{
+      const key=(syncKeyInput.value||"").trim();
+      if(!key){ alert("Enter a Sync Key (letters/numbers/dashes)."); return; }
+      syncKey=key; localStorage.setItem("Habit_SYNC_KEY",syncKey);
+      if(typeof db!=="undefined"){ attachSync(syncKey); setSyncStatus("ok","Linked"); }
+      else setSyncStatus("warn","Config needed");
+    });
+
+    render();
+    initFirebase();
+  </script>
+</body>
+</html>
