@@ -63,6 +63,33 @@
     .input-inline{width:220px}
     .goal{display:inline-flex;gap:6px;align-items:center}
     .goal .n{min-width:2ch;text-align:center;font-weight:650}
+	  /* --- Mobile layout tweaks --- */
+@media (max-width: 600px){
+  h1{ font-size:22px; }
+
+  /* Make the 7-day grid horizontally scrollable with wider cells */
+  #dowRow, #calendarGrid{
+    grid-template-columns: repeat(7, 160px); /* try 140–180px to taste */
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
+    padding-bottom: 6px;
+  }
+  .day{ min-width:160px; }
+  .day-head{ font-size:11px; padding:4px 6px; }
+  .day-body{ padding:6px; gap:6px; }
+
+  /* Compact chips; keep names on one line with ellipsis */
+  .Habit-chip{ padding:8px 10px; font-size:13px; }
+  .Habit-chip .label{
+    display:block;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  /* Hide the small "Tap"/"Undo" hint to save space */
+  .Habit-chip .hint{ display:none; }
+}
   </style>
 
   <!-- Firebase SDKs -->
